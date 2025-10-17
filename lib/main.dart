@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'dart:io';
 import 'database_helper.dart';
 
-final dbHelper = DatabaseHelper();
-
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dbHelper.init();
+
+  // ✅ Detect platform and initialize the correct database factory
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
+  await DatabaseHelper.init();
+
   runApp(const MyApp());
 }
 
@@ -15,68 +24,74 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SQFlite Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: const MyHomePage(),
+      title: 'SQLite Demo',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const SQLiteScreen(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class MyHomePage extends StatelessWidget {
-  const MyHomePage({super.key});
+class SQLiteScreen extends StatefulWidget {
+  const SQLiteScreen({super.key});
+
+  @override
+  State<SQLiteScreen> createState() => _SQLiteScreenState();
+}
+
+class _SQLiteScreenState extends State<SQLiteScreen> {
+  String _output = '';
 
   void _insert() async {
-    Map<String, dynamic> row = {
-      DatabaseHelper.columnName: 'Bob',
-      DatabaseHelper.columnAge: 23
-    };
-    final id = await dbHelper.insert(row);
-    debugPrint('Inserted row id: $id');
+    await DatabaseHelper.insertItem({'name': 'Item ${DateTime.now().millisecondsSinceEpoch}'});
+    setState(() => _output = 'Inserted new record');
   }
 
   void _query() async {
-    final allRows = await dbHelper.queryAllRows();
-    debugPrint('Query all rows:');
-    for (final row in allRows) {
-      debugPrint(row.toString());
-    }
+    final items = await DatabaseHelper.getItems();
+    setState(() => _output = 'Query result:\n${items.map((e) => e['name']).join('\n')}');
   }
 
   void _update() async {
-    Map<String, dynamic> row = {
-      DatabaseHelper.columnId: 1,
-      DatabaseHelper.columnName: 'Mary',
-      DatabaseHelper.columnAge: 32
-    };
-    final rowsAffected = await dbHelper.update(row);
-    debugPrint('Updated $rowsAffected row(s)');
+    await DatabaseHelper.updateFirstItem('Updated Item');
+    setState(() => _output = 'Updated first record');
   }
 
   void _delete() async {
-    final id = await dbHelper.queryRowCount();
-    final rowsDeleted = await dbHelper.delete(id);
-    debugPrint('Deleted $rowsDeleted row(s): row $id');
+    await DatabaseHelper.clearItems();
+    setState(() => _output = 'All records deleted');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('sqflite Demo')),
+      appBar: AppBar(title: const Text('sqlite')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ElevatedButton(onPressed: _insert, child: const Text('Insert')),
-            const SizedBox(height: 10),
-            ElevatedButton(onPressed: _query, child: const Text('Query')),
-            const SizedBox(height: 10),
-            ElevatedButton(onPressed: _update, child: const Text('Update')),
-            const SizedBox(height: 10),
-            ElevatedButton(onPressed: _delete, child: const Text('Delete')),
+            _buildButton('insert', _insert),
+            _buildButton('query', _query),
+            _buildButton('update', _update),
+            _buildButton('delete', _delete),
+            const SizedBox(height: 20),
+            Text(_output, textAlign: TextAlign.center),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildButton(String text, VoidCallback onPressed) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue,
+          minimumSize: const Size(100, 40),
+        ),
+        onPressed: onPressed,
+        child: Text(text, style: const TextStyle(color: Colors.white)),
       ),
     );
   }
